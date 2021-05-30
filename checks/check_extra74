@@ -10,13 +10,21 @@
 # under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 # CONDITIONS OF ANY KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations under the License.
-CHECK_ID_extra74="7.4,7.04"
+CHECK_ID_extra74="7.4"
 CHECK_TITLE_extra74="[extra74] Ensure there are no Security Groups without ingress filtering being used (Not Scored) (Not part of CIS benchmark)"
 CHECK_SCORED_extra74="NOT_SCORED"
 CHECK_TYPE_extra74="EXTRA"
+CHECK_SEVERITY_extra74="High"
+CHECK_ASFF_RESOURCE_TYPE_extra74="AwsEc2SecurityGroup"
 CHECK_ALTERNATE_extra704="extra74"
 CHECK_ALTERNATE_check74="extra74"
 CHECK_ALTERNATE_check704="extra74"
+CHECK_ASFF_COMPLIANCE_TYPE_extra74="ens-mp.com.4.aws.sg.2"
+CHECK_SERVICENAME_extra74="ec2"
+CHECK_RISK_extra74='If Security groups are not filtering traffic appropriately the attack surface is increased.'
+CHECK_REMEDIATION_extra74=' You can grant access to a specific CIDR range; or to another security group in your VPC or in a peer VPC.'
+CHECK_DOC_extra74='https://docs.aws.amazon.com/vpc/latest/userguide/VPC_SecurityGroups.html'
+CHECK_CAF_EPIC_extra74='Infrastructure Security'
 
 extra74(){
   # "Ensure there are no Security Groups without ingress filtering being used (Not Scored) (Not part of CIS benchmark)"
@@ -28,7 +36,7 @@ extra74(){
       if [[ $SG_NO_INGRESS_FILTER -ne 0 ]];then
         textFail "$regx: $SG_ID has no ingress filtering and it is being used!" "$regx"
       else
-        textInfo "$regx: $SG_ID has no ingress filtering but it is no being used" "$regx"
+        textInfo "$regx: $SG_ID has no ingress filtering but it is not being used" "$regx"
       fi
     done
   done

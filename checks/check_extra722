@@ -14,7 +14,14 @@ CHECK_ID_extra722="7.22"
 CHECK_TITLE_extra722="[extra722] Check if API Gateway has logging enabled (Not Scored) (Not part of CIS benchmark)"
 CHECK_SCORED_extra722="NOT_SCORED"
 CHECK_TYPE_extra722="EXTRA"
+CHECK_SEVERITY_extra722="Medium"
+CHECK_ASFF_RESOURCE_TYPE_extra722="AwsApiGatewayRestApi"
 CHECK_ALTERNATE_check722="extra722"
+CHECK_SERVICENAME_extra722="apigateway"
+CHECK_RISK_extra722='If not enabled; monitoring of service use is not possible. Real-time monitoring of API calls can be achieved by directing CloudTrail Logs to CloudWatch Logs and establishing corresponding metric filters and alarms.'
+CHECK_REMEDIATION_extra722='Monitoring is an important part of maintaining the reliability; availability; and performance of API Gateway and your AWS solutions. You should collect monitoring data from all of the parts of your AWS solution. CloudTrail provides a record of actions taken by a user; role; or an AWS service in API Gateway. Using the information collected by CloudTrail; you can determine the request that was made to API Gateway; the IP address from which the request was made; who made the request; etc.'
+CHECK_DOC_extra722='https://docs.aws.amazon.com/apigateway/latest/developerguide/security-monitoring.html'
+CHECK_CAF_EPIC_extra722='Logging and Monitoring'
 
 extra722(){
   # "Check if API Gateway has logging enabled (Not Scored) (Not part of CIS benchmark)"
@@ -26,11 +33,11 @@ extra722(){
         CHECK_STAGES_NAME=$($AWSCLI apigateway get-stages $PROFILE_OPT --region $regx --rest-api-id $apigwid --query "item[*].stageName" --output text)
         if [[ $CHECK_STAGES_NAME ]];then
           for stagname in $CHECK_STAGES_NAME;do
-            CHECK_STAGE_METHOD_LOGGING=$($AWSCLI apigateway get-stages $PROFILE_OPT --region $regx --rest-api-id $apigwid --query "item[?stageName == \`$stagname\` ].methodSettings" --output text|awk '{ print $1" log level "$6}')
+            CHECK_STAGE_METHOD_LOGGING=$($AWSCLI apigateway get-stages $PROFILE_OPT --region $regx --rest-api-id $apigwid --query "item[?stageName == \`$stagname\` ].methodSettings" --output text |awk '{ print $6 }' |egrep 'ERROR|INFO')
             if [[ $CHECK_STAGE_METHOD_LOGGING ]];then
-              textPass "$regx: API Gateway $API_GW_NAME has stage logging enabled for $CHECK_STAGE_METHOD_LOGGING" "$regx"
+              textPass "$regx: API Gateway $API_GW_NAME ID $apigwid in $stagname has logging enabled as $CHECK_STAGE_METHOD_LOGGING" "$regx"
             else
-              textFail "$regx: API Gateway $API_GW_NAME logging disabled for stage $stagname!" "$regx"
+              textFail "$regx: API Gateway $API_GW_NAME ID $apigwid in $stagname has logging disabled" "$regx"
             fi
           done
         else

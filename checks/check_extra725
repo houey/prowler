@@ -15,47 +15,55 @@ CHECK_ID_extra725="7.25"
 CHECK_TITLE_extra725="[extra725] Check if S3 buckets have Object-level logging enabled in CloudTrail (Not Scored) (Not part of CIS benchmark)"
 CHECK_SCORED_extra725="NOT_SCORED"
 CHECK_TYPE_extra725="EXTRA"
+CHECK_SEVERITY_extra725="Medium"
+CHECK_ASFF_RESOURCE_TYPE_extra725="AwsS3Bucket"
 CHECK_ALTERNATE_check725="extra725"
+CHECK_SERVICENAME_extra725="s3"
+CHECK_RISK_extra725='If logs are not enabled; monitoring of service use and threat analysis is not possible.'
+CHECK_REMEDIATION_extra725='Enable logs. Create an S3 lifecycle policy. Define use cases; metrics and automated responses where applicable.'
+CHECK_DOC_extra725='https://docs.aws.amazon.com/AmazonS3/latest/userguide/enable-cloudtrail-logging-for-s3.html'
+CHECK_CAF_EPIC_extra725='Logging and Monitoring'
 
 # per Object-level logging is not configured at Bucket level but at CloudTrail trail level
 extra725(){
   # "Check if S3 buckets have Object-level logging enabled in CloudTrail (Not Scored) (Not part of CIS benchmark)"
   textInfo "Looking for S3 Buckets Object-level logging information in all trails...  "
 
-  # create a file with a list of all buckets
-  TEMP_BUCKET_LIST_FILE=$(mktemp -t prowler.bucket-list-XXXXXX)
-  $AWSCLI s3api list-buckets --query 'Buckets[*].{Name:Name}' $PROFILE_OPT --region $REGION --output text > $TEMP_BUCKET_LIST_FILE
+  LIST_OF_BUCKETS=$($AWSCLI s3api list-buckets $PROFILE_OPT --region $REGION --query 'Buckets[*].{Name:Name}' --output text 2>&1)
+  if [[ $(echo "$LIST_OF_BUCKETS" | grep AccessDenied) ]]; then
+    textFail "Access Denied trying to list buckets"
+    return
+  fi
+  LIST_OF_TRAILS=$($AWSCLI cloudtrail describe-trails $PROFILE_OPT --region $REGION --query 'trailList[].TrailARN' --output text 2>&1)
+  if [[ $(echo "$LIST_OF_TRAILS" | grep AccessDenied) ]]; then
+    textFail "Access Denied trying to describe trails"
+    return
+  fi
+  if [[ $LIST_OF_BUCKETS ]]; then
+    for bucketName in $LIST_OF_BUCKETS; do
+      if [[ $LIST_OF_TRAILS ]]; then
+        BUCKET_ENABLED_TRAILS=()
 
-  # now create a list with all trails available and their region
-  TEMP_TRAILS_LIST_FILE=$(mktemp -t prowler.trails-list-XXXXXX)
-  for regx in $REGIONS; do
-    $AWSCLI cloudtrail describe-trails $PROFILE_OPT --region $regx --query trailList[?HomeRegion==\`$regx\`].[Name,HomeRegion] --output text >> $TEMP_TRAILS_LIST_FILE
-  done
-  if [ ! -s $TEMP_TRAILS_LIST_FILE ]; then
+        for trail in $LIST_OF_TRAILS; do
+          BUCKET_ENABLED_IN_TRAIL=$($AWSCLI cloudtrail get-event-selectors --region $REGION $PROFILE_OPT --trail-name $trail --query "EventSelectors[*].DataResources[?Type == \`AWS::S3::Object\`].Values" --output text |xargs -n1| grep -E "^arn:${AWS_PARTITION}:s3:::$bucketName/\S*$|^arn:${AWS_PARTITION}:s3$|^arn:${AWS_PARTITION}:s3:::$")
+          if [[ $BUCKET_ENABLED_IN_TRAIL ]]; then
+            BUCKET_ENABLED_TRAILS+=($trail)
+          fi
+        done
+
+        if [[ ${#BUCKET_ENABLED_TRAILS[@]} -gt 0 ]]; then
+          for trail in "${BUCKET_ENABLED_TRAILS[@]}"; do
+            textPass "$regx: S3 bucket $bucketName has Object-level logging enabled in trail $trail" "$regx"
+          done
+        else
+          textFail "$regx: S3 bucket $bucketName has Object-level logging disabled" "$regx"
+        fi
+
+      else
+        textFail "$regx: S3 bucket $bucketName is not being recorded no CloudTrail found!" "$regx"
+      fi
+    done
+  else
     textInfo "$regx: No S3 buckets found" "$regx"
-    exit
   fi
-
-  # look for buckets being logged per trail and create a list with them
-  TEMP_BUCKETS_LOGGING_LIST_FILE=$(mktemp -t prowler.buckets-logging-list-XXXXXX)
-  for trail in $(cat $TEMP_TRAILS_LIST_FILE | awk '{ print $1 }'); do
-    TRAIL_REGION=$(grep ^$trail $TEMP_TRAILS_LIST_FILE | awk '{ print $2 }')
-    BUCKETS_OBJECT_LOGGING_ENABLED=$($AWSCLI cloudtrail get-event-selectors --trail-name $trail $PROFILE_OPT --region $TRAIL_REGION --query "EventSelectors[*].DataResources[?Type == \`AWS::S3::Object\`].Values" --output text |xargs -n1 |cut -d: -f 6|sed 's/\///g')
-    echo $BUCKETS_OBJECT_LOGGING_ENABLED |tr " " "\n"|sort >> $TEMP_BUCKETS_LOGGING_LIST_FILE
-    if [[ $BUCKETS_OBJECT_LOGGING_ENABLED ]]; then
-      for bucket in $BUCKETS_OBJECT_LOGGING_ENABLED; do
-        textPass "$regx: S3 bucket $bucket has Object-level logging enabled in trail $trail" "$regx"
-     done
-    fi
-  done
-  # diff to get the ones that are not in any trail then they are not logging
-  BUCKETS_NOT_LOGGING=$(diff $TEMP_BUCKETS_LOGGING_LIST_FILE $TEMP_BUCKET_LIST_FILE | sed -n 's/^> //p')
-  if [[ $BUCKETS_NOT_LOGGING ]]; then
-    for bucket in $BUCKETS_NOT_LOGGING; do
-      textFail "$regx: S3 bucket $bucket has Object-level logging disabled" "$regx"
-   done
-  fi
-  # delete all temp files
-  rm -fr $TEMP_BUCKET_LIST_FILE $TEMP_TRAILS_LIST_FILE $TEMP_BUCKETS_LOGGING_LIST_FILE
-
 }

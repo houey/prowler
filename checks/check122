@@ -9,28 +9,41 @@
 # work. If not, see <http://creativecommons.org/licenses/by-nc-sa/4.0/>.
 
 CHECK_ID_check122="1.22"
-CHECK_TITLE_check122="[check122] Ensure a support role has been created to manage incidents with AWS Support (Scored)"
+CHECK_TITLE_check122="[check122] Ensure IAM policies that allow full \"*:*\" administrative privileges are not created (Scored)"
 CHECK_SCORED_check122="SCORED"
 CHECK_TYPE_check122="LEVEL1"
+CHECK_SEVERITY_check122="Medium"
+CHECK_ASFF_TYPE_check122="Software and Configuration Checks/Industry and Regulatory Standards/CIS AWS Foundations Benchmark"
+CHECK_ASFF_RESOURCE_TYPE_check122="AwsIamPolicy"
 CHECK_ALTERNATE_check122="check122"
+CHECK_SERVICENAME_check122="iam"
+CHECK_RISK_check122='IAM policies are the means by which privileges are granted to users; groups; or roles. It is recommended and considered a standard security advice to grant least privilege—that is; granting only the permissions required to perform a task. Determine what users need to do and then craft policies for them that let the users perform only those tasks instead of allowing full administrative privileges. Providing full administrative privileges instead of restricting to the minimum set of permissions that the user is required to do exposes the resources to potentially unwanted actions.'
+CHECK_REMEDIATION_check122='It is more secure to start with a minimum set of permissions and grant additional permissions as necessary; rather than starting with permissions that are too lenient and then trying to tighten them later. List policies an analyze if permissions are the least possible to conduct business activities.'
+CHECK_DOC_check122='http://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html'
+CHECK_CAF_EPIC_check122='IAM'
 
 check122(){
-  # "Ensure a support role has been created to manage incidents with AWS Support (Scored)"
-  SUPPORTPOLICYARN=$($AWSCLI iam list-policies --query "Policies[?PolicyName == 'AWSSupportAccess'].Arn" $PROFILE_OPT --region $REGION --output text)
-  if [[ $SUPPORTPOLICYARN ]];then
-    for policyarn in $SUPPORTPOLICYARN;do
-      POLICYUSERS=$($AWSCLI iam list-entities-for-policy --policy-arn $SUPPORTPOLICYARN $PROFILE_OPT --region $REGION --output json)
-      if [[ $POLICYUSERS ]];then
-        textPass "Support Policy attached to $policyarn"
-        for user in $(echo "$POLICYUSERS" | grep UserName | cut -d'"' -f4) ; do
-          textInfo "User $user has support access via $policyarn"
-        done
-        # textInfo "Make sure your team can create a Support case with AWS "
-      else
-        textFail "Support Policy not applied to any Group / User / Role "
+  # "Ensure IAM policies that allow full \"*:*\" administrative privileges are not created (Scored)"
+  LIST_CUSTOM_POLICIES=$($AWSCLI iam list-policies --output text $PROFILE_OPT --region $REGION --scope Local --query 'Policies[*].[Arn,DefaultVersionId]' | grep -v -e '^None$' | awk -F '\t' '{print $1","$2"\n"}')
+  if [[ $LIST_CUSTOM_POLICIES ]]; then
+    textInfo "Looking for custom policies: (skipping default policies - it may take few seconds...)"
+    for policy in $LIST_CUSTOM_POLICIES; do
+      POLICY_ARN=$(echo $policy | awk -F ',' '{print $1}')
+      POLICY_VERSION=$(echo $policy | awk -F ',' '{print $2}')
+      POLICY_WITH_FULL=$($AWSCLI iam get-policy-version --output text --policy-arn $POLICY_ARN --version-id $POLICY_VERSION --query "[PolicyVersion.Document.Statement] | [] | [?Action!=null] | [?Effect == 'Allow' && Resource == '*' && Action == '*']" $PROFILE_OPT --region $REGION)
+      if [[ $POLICY_WITH_FULL ]]; then
+        POLICIES_ALLOW_LIST="$POLICIES_ALLOW_LIST $POLICY_ARN"
       fi
     done
+    if [[ $POLICIES_ALLOW_LIST ]]; then
+      textInfo "List of custom policies: "
+      for policy in $POLICIES_ALLOW_LIST; do
+        textFail "Policy $policy allows \"*:*\""
+      done
+    else
+        textPass "No custom policy found that allow full \"*:*\" administrative privileges"
+    fi
   else
-    textFail "No Support Policy found"
+    textPass "No custom policies found"
   fi
 }

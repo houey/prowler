@@ -8,20 +8,37 @@
 # You should have received a copy of the license along with this
 # work. If not, see <http://creativecommons.org/licenses/by-nc-sa/4.0/>.
 
-CHECK_ID_check25="2.5,2.05"
+CHECK_ID_check25="2.5"
 CHECK_TITLE_check25="[check25] Ensure AWS Config is enabled in all regions (Scored)"
 CHECK_SCORED_check25="SCORED"
 CHECK_TYPE_check25="LEVEL1"
+CHECK_SEVERITY_check25="Medium"
+CHECK_ASFF_TYPE_check25="Software and Configuration Checks/Industry and Regulatory Standards/CIS AWS Foundations Benchmark"
 CHECK_ALTERNATE_check205="check25"
+CHECK_ASFF_COMPLIANCE_TYPE_check25="ens-op.exp.1.aws.cfg.1"
+CHECK_SERVICENAME_check25="configservice"
+CHECK_RISK_check25='The AWS configuration item history captured by AWS Config enables security analysis; resource change tracking; and compliance auditing.'
+CHECK_REMEDIATION_check25='It is recommended to enable AWS Config be enabled in all regions.'
+CHECK_DOC_check25='https://aws.amazon.com/blogs/mt/aws-config-best-practices/'
+CHECK_CAF_EPIC_check25='Logging and Monitoring'
 
 check25(){
   # "Ensure AWS Config is enabled in all regions (Scored)"
   for regx in $REGIONS; do
-    CHECK_AWSCONFIG_STATUS=$($AWSCLI configservice get-status $PROFILE_OPT --region $regx --output json| grep "recorder: ON")
-    if [[ $CHECK_AWSCONFIG_STATUS ]];then
-      textPass "Region $regx has AWS Config recorder: ON" "$regx"
+    CHECK_AWSCONFIG_RECORDING=$($AWSCLI configservice describe-configuration-recorder-status $PROFILE_OPT --region $regx --query 'ConfigurationRecordersStatus[*].recording' --output text 2>&1)
+    CHECK_AWSCONFIG_STATUS=$($AWSCLI configservice describe-configuration-recorder-status $PROFILE_OPT --region $regx --query 'ConfigurationRecordersStatus[*].lastStatus' --output text 2>&1)
+    if [[ $(echo "$CHECK_AWSCONFIG_STATUS" | grep AccessDenied) ]]; then
+      textFail "Access Denied trying to describe configuration recorder status in $regx"
+      continue
+    fi
+    if [[ $CHECK_AWSCONFIG_RECORDING == "True" ]]; then
+      if [[ $CHECK_AWSCONFIG_STATUS == "SUCCESS" ]]; then
+        textPass "Region $regx AWS Config recorder enabled"
+      else
+        textFail "Region $regx AWS Config recorder in failure state"
+      fi
     else
-      textFail "Region $regx has AWS Config disabled or not configured" "$regx"
+      textFail "Region $regx AWS Config recorder disabled"
     fi
   done
 }
